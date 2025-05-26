@@ -29,7 +29,7 @@ class MemoryManager:
         处理新的聊天历史输入格式，并添加/融合记忆。
         chat_history 格式: [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hello good job"}]
         """
-        print(f"伪：正在处理用户 '{user_id}' 的聊天历史...")
+        # TODO f"伪：正在处理用户 '{user_id}' 的聊天历史..."
         if not isinstance(chat_history, list):
             print("错误：聊天历史输入格式不正确，应为列表。")
             return
