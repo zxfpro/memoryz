@@ -65,6 +65,10 @@ class InMemoryMemoryRepository(MemoryRepository):
         user_memories, user_data = self._get_user_store(user_id)
         next_memory_id = user_data['_next_memory_id']
 
+        # Ensure related_memories is a list
+        if related_memories is None:
+            related_memories = []
+
         # 伪：检查内容是否重复 (仅在该用户内部检查)
         for node in user_memories.values():
             if node.content == content:
@@ -73,7 +77,7 @@ class InMemoryMemoryRepository(MemoryRepository):
 
         memory_id = next_memory_id
         timestamp = int(time.time()) # 伪：使用当前时间戳
-        node = MemoryNode(memory_id, user_id, content, timestamp, related_memories)
+        node = MemoryNode(memory_id, user_id, content, timestamp)
         user_memories[memory_id] = node
         user_data['_next_memory_id'] += 1
         print(f"伪：用户 '{user_id}' 记忆添加成功，ID: {memory_id}")
@@ -94,23 +98,6 @@ class InMemoryMemoryRepository(MemoryRepository):
             node.content = new_content
             print(f"伪：用户 '{user_id}' 的记忆 ID: {memory_id} 内容更新成功")
 
-        if add_related:
-            for rel_id in add_related:
-                # 伪：检查关联记忆是否存在于该用户下
-                if rel_id in user_memories and rel_id not in node.related_memories:
-                    node.related_memories.append(rel_id)
-                    print(f"伪：用户 '{user_id}' 的记忆 ID: {memory_id} 添加关联记忆 ID: {rel_id}")
-                elif rel_id not in user_memories:
-                     print(f"伪：警告：用户 '{user_id}' 的关联记忆 ID: {rel_id} 不存在")
-
-
-        if remove_related:
-            for rel_id in remove_related:
-                if rel_id in node.related_memories:
-                    node.related_memories.remove(rel_id)
-                    print(f"伪：用户 '{user_id}' 的记忆 ID: {memory_id} 移除关联记忆 ID: {rel_id}")
-                else:
-                     print(f"伪：警告：用户 '{user_id}' 的关联记忆 ID: {rel_id} 未与记忆 ID: {memory_id} 关联")
         return True
 
     def delete(self, user_id, memory_id):
@@ -140,6 +127,11 @@ class InMemoryMemoryRepository(MemoryRepository):
         # 伪：简单地返回该用户下最后添加的 limit 个
         all_memories = sorted(user_memories.values(), key=lambda x: x.timestamp)
         return all_memories[-limit:] if len(all_memories) > limit else all_memories
+
+    def get_all(self, user_id):
+        user_memories, _ = self._get_user_store(user_id)
+        return list(user_memories.values())
+
 
     def get_all(self, user_id):
         user_memories, _ = self._get_user_store(user_id)

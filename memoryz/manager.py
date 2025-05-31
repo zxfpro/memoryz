@@ -3,6 +3,7 @@
 from memoryz.repository import MemoryRepository, get_memory_repository
 from memoryz.models import MemoryNode
 import json # 用于处理新的输入格式
+from memoryz.querys import Querys # 导入 Querys 类
 # 导入可能的底层交互库（伪）
 # import llama_index_client as li_client
 # import memoryling_client as ml_client
@@ -18,6 +19,7 @@ class MemoryManager:
     """
     def __init__(self, repository: MemoryRepository):
         self._repository = repository
+        self._querys = Querys(repository=repository) # 实例化 Querys 类，伪：可能需要传递 repository 或其他配置
         # 伪：初始化底层交互客户端
         # self._li_client = li_client.Client() # 伪
         # self._ml_client = ml_client.Client() # 伪
@@ -70,6 +72,9 @@ class MemoryManager:
         # 伪：简化处理，直接将新内容添加为记忆，并尝试与最近的记忆关联
         new_memory_id = self._repository.add(user_id, new_content)
 
+        # 调用 Querys 的 build 方法构建索引
+        self._querys.build(user_id, new_content, memory_id=new_memory_id)
+
         # 伪：尝试与最近的几条记忆建立关联
         recent_memories = self._repository.get_recent(user_id, limit=5) # 伪：获取最近5条
         related_ids = [mem.id for mem in recent_memories if mem.id != new_memory_id]
@@ -93,7 +98,14 @@ class MemoryManager:
         """
         更新指定用户的记忆。
         """
-        return self._repository.update(user_id, memory_id, new_content, add_related, remove_related)
+        # 先更新 Repository
+        success = self._repository.update(user_id, memory_id, new_content, add_related, remove_related)
+
+        # 如果内容更新了，调用 Querys 的 build 方法更新索引
+        if success and new_content is not None:
+             self._querys.build(user_id, new_content, memory_id=memory_id)
+
+        return success
 
     def query_memory(self, user_id, query_text):
         """
@@ -104,59 +116,25 @@ class MemoryManager:
         """
         print(f"伪：正在查询用户 '{user_id}' 与 '{query_text}' 相关的记忆...")
 
-        # 1. 从 Repository 获取初步匹配的记忆
-        repo_results = self._repository.find_by_content(user_id, query_text)
-        print(f"伪：Repository 初步查询结果 ({len(repo_results)} 条)")
+        # 调用 Querys 的 query 方法获取结果
+        query_results = self._querys.query(user_id, query_text)
 
-        # 2. 与底层交互获取更多相关记忆
-        external_results = []
-        # 伪：与底层交互
-        # try:
-        #     # 伪：根据配置选择底层
-        #     if 'llama_index':
-        #         # 伪：调用 Llama Index 查询，可能需要传递用户ID或在底层处理用户隔离
-        #         li_results = self._li_client.query(user_id, query_text) # 伪调用
-        #         external_results.extend(li_results)
-        #     elif 'memoryling':
-        #         # 伪：调用 Memoryling 查询
-        #         ml_results = self._ml_client.query(user_id, query_text) # 伪调用
-        #         external_results.extend(ml_results)
-        # except Exception as e:
-        #     print(f"伪：底层交互发生错误: {e}")
-        #     # 伪：处理网络问题和请求报错，例如重试、记录日志、返回部分结果等
-        #     pass # 伪：忽略错误继续
-
-        # 3. 合并并处理结果：筛选、剔除、处理跨时间轴关联
-        # 伪：这里需要更复杂的逻辑来处理图结构、关联度、时间轴等进行筛选和排序
-        all_results = repo_results + external_results # 伪：简单合并
-        final_results = []
-        seen_ids = set()
-
-        print("伪：处理结果：筛选、剔除、跨时间轴关联...")
-        for res in all_results:
-            if isinstance(res, dict): # 伪：处理来自外部库的字典格式结果
-                 mem_id = res.get('id')
-                 content = res.get('content')
-                 related = res.get('related', [])
-                 # 伪：确保结果属于当前用户 (如果底层交互没有自动处理)
-                 res_user_id = res.get('user_id')
-                 if mem_id is not None and mem_id not in seen_ids and (res_user_id is None or res_user_id == user_id):
-                      final_results.append({'id': mem_id, 'content': content, 'related': related})
-                      seen_ids.add(mem_id)
-            elif isinstance(res, MemoryNode): # 处理来自 Repository 的 MemoryNode
-                 if res.id not in seen_ids and res.user_id == user_id: # 确保属于当前用户
-                      final_results.append({'id': res.id, 'content': res.content, 'related': res.related_memories})
-                      seen_ids.add(res.id)
-
+        # 伪：这里可以根据需要进一步处理 query_results，
+        # 例如从 Repository 获取更详细的信息，或者结合图结构进行后处理。
+        # 目前，我们直接返回 Querys 的结果。
 
         print("查询结果：")
-        if final_results:
-            for res in final_results:
-                print(f"  ID: {res['id']}, 内容: '{res['content']}', 关联记忆ID: {res['related']}")
+        if query_results:
+            for res in query_results:
+                # 确保结果格式正确，与 CLI 期望的输出一致
+                mem_id = res.get('id', 'N/A')
+                content = res.get('content', 'N/A')
+                related = res.get('related', [])
+                print(f"  ID: {mem_id}, 内容: '{content}', 关联记忆ID: {related}")
         else:
             print("  未找到相关记忆。")
 
-        return final_results
+        return query_results
 
 
     def get_chat_history(self, user_id, limit=10):
